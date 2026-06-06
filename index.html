@@ -1334,24 +1334,39 @@ Business snapshot:
 - Total sales logged: ${DB.sales.length}
 Be concise, practical, and use Ethiopian business context where relevant.`;
 
+  // ── FIX v3.1: Call /api/coach on the local Flask server instead of calling
+  // external AI APIs directly from the browser. Direct browser calls to
+  // api.anthropic.com or generativelanguage.googleapis.com are blocked by
+  // CORS. The Flask server (spare_bi_copilot.py) holds the API key securely
+  // and forwards the request server-side.
+  //
+  // COACH_API_URL is injected by the Flask PIN injector as:
+  //   window.COACH_API_URL = 'https://your-ngrok-url/api/coach'
+  // If running locally, it falls back to the same-origin /api/coach.
+  const coachUrl = window.COACH_API_URL || '/api/coach';
+
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(coachUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: context,
-        messages: [{ role: 'user', content: text }]
+        message: text,
+        context: context   // send the business context so server can use it
       })
     });
+
+    if (!response.ok) {
+      throw new Error(`Server error ${response.status}`);
+    }
+
     const data  = await response.json();
-    const reply = data.content?.map(c => c.text || '').join('') || '⚠️ No response received.';
+    const reply = data.reply || '⚠️ No response received.';
     tDiv.className   = 'coach-msg bot';
     tDiv.textContent = reply;
   } catch (err) {
     tDiv.className   = 'coach-msg bot';
-    tDiv.textContent = '⚠️ Could not reach AI Coach. Check your connection.';
+    tDiv.textContent = '⚠️ Could not reach AI Coach. Make sure the bot server is running and COACH_API_URL is set correctly.';
+    console.error('Coach API error:', err);
   }
 
   btn.disabled = false;
